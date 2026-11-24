@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <a href="menu.html" class="logo">FoodApp</a>
+    <a href="menu.html" class="link">← Back to menu</a>
+  </header>
+
+  <!--
+    IMPORTANT: This page only shows the payment form and checks the input.
+    It does NOT charge a card. For real payments, use a payment provider such as
+    Stripe or Razorpay. Their ready-made card fields send card details straight to
+    them, so your own app never stores or sees card numbers.
+  -->
+
+  <div class="pay-layout">
+    <form class="card" id="payForm" novalidate>
+      <h1>Payment</h1>
+      <p class="subtitle">Enter your card details</p>
+
+      <div class="field">
+        <label for="name">Name on card</label>
+        <input type="text" id="name" placeholder="Full name" autocomplete="cc-name">
+        <div class="error-text" id="nameError"></div>
+      </div>
+
+      <div class="field">
+        <label for="cardNumber">Card number</label>
+        <input type="text" id="cardNumber" inputmode="numeric" placeholder="1234 5678 9012 3456" maxlength="19" autocomplete="cc-number">
+        <div class="error-text" id="cardError"></div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="expiry">Expiry</label>
+          <input type="text" id="expiry" inputmode="numeric" placeholder="MM/YY" maxlength="5" autocomplete="cc-exp">
+          <div class="error-text" id="expiryError"></div>
+        </div>
+        <div class="field">
+          <label for="cvv">CVV</label>
+          <input type="password" id="cvv" inputmode="numeric" placeholder="123" maxlength="4" autocomplete="cc-csc">
+          <div class="error-text" id="cvvError"></div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn" id="payBtn">Pay</button>
+      <p class="secure-note">🔒 Demo form: no real payment is made.</p>
+    </form>
+
+    <aside class="cart">
+      <h2>Order summary</h2>
+      <div id="summary"></div>
+      <div class="cart-line"><span>Tax (6%)</span><span id="tax">$0.00</span></div>
+      <div class="total-line"><span>Total</span><span id="grandTotal">$0.00</span></div>
+    </aside>
+  </div>
+
+  <script>
+    const money = (n) => "$" + n.toFixed(2);
+
+    // ----- Load the order saved by the menu page -----
+    let order = [];
+    try { order = JSON.parse(sessionStorage.getItem("order")) || []; } catch (err) {}
+
+    const subtotal = order.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const tax = subtotal * 0.06;
+    const total = subtotal + tax;
+
+    document.getElementById("summary").innerHTML = order.length
+      ? order.map((i) => `<div class="cart-line"><span>${i.qty} × ${i.name}</span><span>${money(i.price * i.qty)}</span></div>`).join("")
+      : `<p class="cart-empty">No items. <a href="menu.html">Go to menu</a></p>`;
+    document.getElementById("tax").textContent = money(tax);
+    document.getElementById("grandTotal").textContent = money(total);
+    document.getElementById("payBtn").textContent = "Pay " + money(total);
+    document.getElementById("payBtn").disabled = order.length === 0;
+
+    // ----- Auto-format the inputs while typing -----
+    const cardNumber = document.getElementById("cardNumber");
+    const expiry = document.getElementById("expiry");
+    const cvv = document.getElementById("cvv");
+    const nameInput = document.getElementById("name");
+
+    cardNumber.addEventListener("input", () => {
+      const digits = cardNumber.value.replace(/\D/g, "").slice(0, 16);
+      cardNumber.value = digits.replace(/(.{4})/g, "$1 ").trim();   // 1234 5678 ...
+    });
+
+    expiry.addEventListener("input", () => {
+      const digits = expiry.value.replace(/\D/g, "").slice(0, 4);
+      expiry.value = digits.length > 2 ? digits.slice(0, 2) + "/" + digits.slice(2) : digits;
+    });
+
+    cvv.addEventListener("input", () => {
+      cvv.value = cvv.value.replace(/\D/g, "").slice(0, 4);
+    });
+
+    // ----- Checks -----
+    // Luhn check: catches most typing mistakes in a card number
+    function luhnValid(number) {
+      let sum = 0, double = false;
+      for (let i = number.length - 1; i >= 0; i--) {
+        let d = parseInt(number[i], 10);
+        if (double) { d *= 2; if (d > 9) d -= 9; }
+        sum += d;
+        double = !double;
+      }
+      return sum % 10 === 0;
+    }
+
+    function expiryValid(value) {
+      const match = /^(\d{2})\/(\d{2})$/.exec(value);
+      if (!match) return false;
+      const month = parseInt(match[1], 10);
+      const year = 2000 + parseInt(match[2], 10);
+      if (month < 1 || month > 12) return false;
+      const now = new Date();
+      const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+      return endOfMonth >= now;
+    }
+
+    function setError(input, errorId, message) {
+      document.getElementById(errorId).textContent = message;
+      input.classList.toggle("invalid", message !== "");
+      return message === "";
+    }
+
+    document.getElementById("payForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const digits = cardNumber.value.replace(/\s/g, "");
+
+      const ok = [
+        setError(nameInput, "nameError", nameInput.value.trim().length >= 2 ? "" : "Please enter the name on the card."),
+        setError(cardNumber, "cardError", digits.length >= 13 && luhnValid(digits) ? "" : "Please enter a valid card number."),
+        setError(expiry, "expiryError", expiryValid(expiry.value) ? "" : "Invalid or expired date."),
+        setError(cvv, "cvvError", /^\d{3,4}$/.test(cvv.value) ? "" : "3 or 4 digits."),
+      ].every(Boolean);
+
+      if (!ok) return;
+
+      // TODO: here you would hand the payment to Stripe / Razorpay.
+      try { sessionStorage.removeItem("order"); } catch (err) {}
+      document.querySelector(".pay-layout").innerHTML = `
+        <div class="card success" style="grid-column: 1 / -1; max-width: 420px; margin: 0 auto;">
+          <div class="tick">✔</div>
+          <h1>Payment successful</h1>
+          <p class="subtitle">Thank you! Your order of ${money(total)} is being prepared.</p>
+          <a href="menu.html" class="btn" style="display:block; text-decoration:none;">Order more</a>
+        </div>`;
+    });
+  </script>
+</body>
+</html>

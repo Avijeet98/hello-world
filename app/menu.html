@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menu</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <a href="menu.html" class="logo">FoodApp</a>
+    <a href="login.html" class="link">Log out</a>
+  </header>
+
+  <div class="menu-layout">
+    <main>
+      <div class="categories" id="categories"></div>
+      <div class="items" id="items"></div>
+    </main>
+
+    <aside class="cart">
+      <h2>Your order</h2>
+      <div id="cartLines"></div>
+      <div class="total-line"><span>Total</span><span id="cartTotal">$0.00</span></div>
+      <button class="btn" id="checkoutBtn" disabled>Go to payment</button>
+    </aside>
+  </div>
+
+  <script>
+    // ----- Menu data (change these to your own items) -----
+    const menu = [
+      { id: 1, name: "Margherita Pizza", desc: "Tomato, mozzarella, fresh basil", price: 9.99, category: "Pizza", emoji: "🍕" },
+      { id: 2, name: "Pepperoni Pizza", desc: "Loaded with pepperoni and cheese", price: 11.49, category: "Pizza", emoji: "🍕" },
+      { id: 3, name: "Classic Burger", desc: "Beef patty, lettuce, tomato, cheese", price: 8.99, category: "Burgers", emoji: "🍔" },
+      { id: 4, name: "Veggie Burger", desc: "Grilled veggie patty with sauce", price: 8.49, category: "Burgers", emoji: "🍔" },
+      { id: 5, name: "Paneer Tikka", desc: "Spiced grilled cottage cheese", price: 10.99, category: "Indian", emoji: "🍢" },
+      { id: 6, name: "Butter Chicken", desc: "Creamy tomato curry with naan", price: 12.99, category: "Indian", emoji: "🍛" },
+      { id: 7, name: "French Fries", desc: "Crispy and salted", price: 3.49, category: "Sides", emoji: "🍟" },
+      { id: 8, name: "Mango Lassi", desc: "Sweet mango yogurt drink", price: 3.99, category: "Drinks", emoji: "🥭" },
+      { id: 9, name: "Cola", desc: "Chilled 330 ml can", price: 1.99, category: "Drinks", emoji: "🥤" },
+    ];
+
+    const cart = {};          // { itemId: quantity }
+    let activeCategory = "All";
+
+    const money = (n) => "$" + n.toFixed(2);
+
+    function renderCategories() {
+      const names = ["All", ...new Set(menu.map((m) => m.category))];
+      const box = document.getElementById("categories");
+      box.innerHTML = "";
+      names.forEach((name) => {
+        const chip = document.createElement("button");
+        chip.className = "chip" + (name === activeCategory ? " active" : "");
+        chip.textContent = name;
+        chip.onclick = () => { activeCategory = name; renderCategories(); renderItems(); };
+        box.appendChild(chip);
+      });
+    }
+
+    function renderItems() {
+      const box = document.getElementById("items");
+      box.innerHTML = "";
+      menu
+        .filter((m) => activeCategory === "All" || m.category === activeCategory)
+        .forEach((m) => {
+          const qty = cart[m.id] || 0;
+          const card = document.createElement("div");
+          card.className = "item";
+          card.innerHTML = `
+            <div class="emoji">${m.emoji}</div>
+            <h3>${m.name}</h3>
+            <p>${m.desc}</p>
+            <div class="bottom">
+              <span class="price">${money(m.price)}</span>
+              ${qty === 0
+                ? `<button class="btn btn-small" data-add="${m.id}">Add</button>`
+                : `<div class="qty">
+                     <button data-minus="${m.id}">−</button><span>${qty}</span><button data-add="${m.id}">+</button>
+                   </div>`}
+            </div>`;
+          box.appendChild(card);
+        });
+    }
+
+    function renderCart() {
+      const lines = document.getElementById("cartLines");
+      const ids = Object.keys(cart);
+      let total = 0;
+
+      if (ids.length === 0) {
+        lines.innerHTML = `<p class="cart-empty">Your cart is empty.</p>`;
+      } else {
+        lines.innerHTML = ids.map((id) => {
+          const item = menu.find((m) => m.id == id);
+          const lineTotal = item.price * cart[id];
+          total += lineTotal;
+          return `<div class="cart-line"><span>${cart[id]} × ${item.name}</span><span>${money(lineTotal)}</span></div>`;
+        }).join("");
+      }
+
+      document.getElementById("cartTotal").textContent = money(total);
+      document.getElementById("checkoutBtn").disabled = ids.length === 0;
+    }
+
+    // One click handler for all + / − / Add buttons
+    document.getElementById("items").addEventListener("click", (e) => {
+      const addId = e.target.dataset.add;
+      const minusId = e.target.dataset.minus;
+      if (addId) cart[addId] = (cart[addId] || 0) + 1;
+      if (minusId) {
+        cart[minusId]--;
+        if (cart[minusId] <= 0) delete cart[minusId];
+      }
+      renderItems();
+      renderCart();
+    });
+
+    // Save the order and go to the payment page
+    document.getElementById("checkoutBtn").addEventListener("click", () => {
+      const order = Object.keys(cart).map((id) => {
+        const item = menu.find((m) => m.id == id);
+        return { name: item.name, price: item.price, qty: cart[id] };
+      });
+      try { sessionStorage.setItem("order", JSON.stringify(order)); } catch (err) {}
+      window.location.href = "payment.html";
+    });
+
+    renderCategories();
+    renderItems();
+    renderCart();
+  </script>
+</body>
+</html>
